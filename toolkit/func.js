@@ -79,7 +79,8 @@ export class func {
     try {
       let meta = isGroup ? await this.getGroupMetadata(cht.id, Exp) : null;
       //console.log(meta)
-      let participants = meta?.participants || this.lid();
+      let participants =
+        meta?.adressingMode == 'lid' ? meta.participants : this.lid();
 
       let v = participants.find(
         (a) =>
@@ -886,41 +887,73 @@ export class func {
     return new Promise((resolve, reject) => {
       let sourceFolder = path.resolve(source);
       let outputPath = path.resolve(output);
-      const tarFilePath = outputPath.replace('.gz', '');
+      const tarFilePath = outputPath.replace(/\.gz$/, '');
 
-      exec(
-        `tar --exclude='node_modules' --exclude='.git' --exclude='.npm' -cf ${tarFilePath} -C ${path.dirname(sourceFolder)} ${path.basename(sourceFolder)}`,
-        (err, stdout, stderr) => {
-          if (err) {
-            return reject({
-              status: false,
-              msg: `Terjadi kesalahan saat membuat file tar: ${stderr}`,
-            });
-          }
+      const excludeArgs = [
+        "--exclude='node_modules'",
+        "--exclude='.git'",
+        "--exclude='.npm'",
+        "--exclude='connection/session/*'",
+        "--exclude='connection/session/**'",
+      ].join(' ');
 
-          const input = fs.createReadStream(tarFilePath);
-          const output = fs.createWriteStream(outputPath);
-          const gzip = zlib.createGzip();
+      const credsPath = path.join(
+        sourceFolder,
+        'connection',
+        'session',
+        'creds.json'
+      );
+      const relativeCreds = `${path.basename(sourceFolder)}/connection/session/creds.json`;
 
-          input.pipe(gzip).pipe(output);
+      const appendCreds = fs.existsSync(credsPath)
+        ? `&& tar --append -f ${tarFilePath} -C ${path.dirname(sourceFolder)} ${relativeCreds}`
+        : '';
 
-          output.on('finish', () => {
-            fs.unlinkSync(tarFilePath);
-            resolve({
-              status: true,
-              msg: `Backup selesai! File tar.gz: ${outputPath}`,
-            });
-          });
+      const tarCmd = `
+      tar ${excludeArgs} -cf ${tarFilePath} -C ${path.dirname(sourceFolder)} ${path.basename(sourceFolder)} \
+      ${appendCreds}
+    `;
 
-          output.on('error', (err) => {
-            reject({
-              status: false,
-              msg: `Terjadi kesalahan saat membuat file gzip: ${err.message}`,
-            });
+      exec(tarCmd, (err, stdout, stderr) => {
+        if (err) {
+          return reject({
+            status: false,
+            msg: `Terjadi kesalahan saat membuat file tar: ${stderr}`,
           });
         }
-      );
+
+        const input = fs.createReadStream(tarFilePath);
+        const outputStream = fs.createWriteStream(outputPath);
+        const gzip = zlib.createGzip();
+
+        input.pipe(gzip).pipe(outputStream);
+
+        outputStream.on('finish', () => {
+          fs.unlinkSync(tarFilePath);
+          resolve({
+            status: true,
+            msg: `Backup selesai! File tar.gz: ${outputPath}`,
+          });
+        });
+
+        outputStream.on('error', (err) => {
+          reject({
+            status: false,
+            msg: `Terjadi kesalahan saat membuat file gzip: ${err.message}`,
+          });
+        });
+      });
     });
+  }
+
+  async generateSN(length = 16) {
+    const chars =
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let sn = '';
+    for (let i = 0; i < length; i++) {
+      sn += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return sn;
   }
 
   formatDateTimeParts(date, timeZone = 'Asia/Jakarta', code = 'id-ID') {

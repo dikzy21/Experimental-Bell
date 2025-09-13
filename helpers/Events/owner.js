@@ -56,6 +56,7 @@ export default async function on({ cht, Exp, store, ev, is }) {
     editmsg: 'edit message',
     similarCmd: 'similarity command',
     antitagowner: 'Anti Tag Owner',
+    register: 'register mode',
     keyChecker: 'Auto detector apikey',
   };
 
@@ -133,7 +134,9 @@ export default async function on({ cht, Exp, store, ev, is }) {
                                   ? true
                                   : t1 == 'chid'
                                     ? true
-                                    : false);
+                                    : t1 == 'replyAi'
+                                      ? infos.owner.setReplyAi
+                                      : false);
 
         if (!mode) return cht.reply(infos.owner.set);
 
@@ -478,6 +481,18 @@ export default async function on({ cht, Exp, store, ev, is }) {
                 ? infos.owner.isModeOffSuccess
                 : infos.owner.isModeOnSuccess,
               { mode }
+            );
+          }
+        } else if (t1 == 'replyAi') {
+          if (t2) {
+            let off = ['off', 'false'];
+            let isOff = off.includes(t2);
+            let on = ['on', 'true'];
+            let isOn = on.includes(t2);
+            if (!(isOff || isOn)) return cht.reply(infos.owner.setAntiTagOwner);
+            cfg['replyAi'] = isOn;
+            return cht.reply(
+              isOn ? infos.owner.isReplyAiOn : infos.owner.isReplyAiOff
             );
           } else {
             if (!cht.quoted) return cht.reply(infos.owner.setAntiTagOwner);
@@ -1017,28 +1032,33 @@ export default async function on({ cht, Exp, store, ev, is }) {
       tag: 'owner',
     },
     async ({ args }) => {
-      await cht.reply('Proses backup dimulai...');
-      let b = './backup.tar.gz';
-      let s = await Exp.func.createTarGz('./', b);
-      if (!s.status) return cht.reply(s.msg);
-      await cht.edit(
-        `File backup sedang dikirim${is.group ? ' melalui private chat...' : '...'}`,
-        keys[sender]
-      );
-      await Exp.sendMessage(
-        sender,
-        {
-          document: { url: b },
-          mimetype: 'application/zip',
-          fileName: `${path.basename(path.resolve('./'))} || ${Exp.func.dateFormatter(Date.now(), 'Asia/Jakarta')}.tar.gz`,
-          ai: true,
-        },
-        { quoted: cht }
-      );
-      await cht.reply(
-        `*Proses backup selesai✅️*${is.group ? '\nFile telah dikirimkan melalui chat pribadi' : ''}`
-      );
-      fs.unlinkSync(b);
+      try {
+        await cht.reply('Proses backup dimulai...');
+        let b = './backup.tar.gz';
+        let s = await Exp.func.createTarGz('./', b);
+        if (!s.status) return cht.reply(s.msg);
+          await cht.edit(
+          `File backup sedang dikirim${is.group ? ' melalui private chat...' : '...'}`,
+          keys[sender]
+        );
+        await Exp.sendMessage(
+          sender,
+          {
+            document: { url: b },
+            mimetype: 'application/zip',
+            fileName: `${path.basename(path.resolve('./'))} || ${Exp.func.dateFormatter(Date.now(), 'Asia/Jakarta')}.tar.gz`,
+            ai: true,
+          },
+          { quoted: cht }
+        );
+        await cht.reply(
+          `*Proses backup selesai✅️*${is.group ? '\nFile telah dikirimkan melalui chat pribadi' : ''}`
+        );
+        fs.unlinkSync(b);
+      } catch(e) {
+        console.error(e)
+        cht.reply(JSON.stringify(e,0,2))
+      }
     }
   );
 
@@ -1208,7 +1228,7 @@ export default async function on({ cht, Exp, store, ev, is }) {
             'raw.githubusercontent.com',
           ].includes(host);
           if (!isValidHost) {
-            failed += `\n- ${url}\n> Invalid host url`;
+            failed += `\n- ${link}\n> Invalid host url`;
             return null;
           }
           let f = (
@@ -1223,7 +1243,7 @@ export default async function on({ cht, Exp, store, ev, is }) {
           const filename = f.slice(-1)[0];
 
           if (!filename) {
-            failed += `\n- ${url}\n> File empty`;
+            failed += `\n- ${link}\n> File empty`;
             return null;
           }
 
@@ -1268,9 +1288,11 @@ export default async function on({ cht, Exp, store, ev, is }) {
         } else {
           newfile += `\n- \`new\`: ${fpath}`;
         }
-        if (path.basename(fpath) === "global.js") {
-          let oldContent = fs.existsSync(fpath) ? fs.readFileSync(fpath, "utf8") : "";
-          let oldMongo = "";
+        if (path.basename(fpath) === 'global.js') {
+          let oldContent = fs.existsSync(fpath)
+            ? fs.readFileSync(fpath, 'utf8')
+            : '';
+          let oldMongo = '';
 
           let match = oldContent.match(/let\s+mongoURI\s*=\s*['"`](.*?)['"`]/);
           if (match) {
@@ -1695,6 +1717,19 @@ export default async function on({ cht, Exp, store, ev, is }) {
         }
       }
       cht.reply(g);
+    }
+  );
+
+  ev.on(
+    {
+      cmd: ['reloadevents'],
+      listmenu: ['reloadevents'],
+      isOwner: true,
+      tag: 'owner',
+    },
+    async ({ args }) => {
+      await ev.reloadEventHandlers();
+      cht.reply('Success✅, All Events have been reloaded!');
     }
   );
 }
